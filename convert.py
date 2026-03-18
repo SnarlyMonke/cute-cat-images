@@ -13,6 +13,8 @@ If Pillow is installed (PIL), JPG/JPEG images will be converted to PNG. If it's 
 installed, the script will just copy files and keep their original format extension.
 """
 
+#wow i know how this code works bcos i totally made it myself :)
+
 from __future__ import annotations
 
 import os
@@ -32,6 +34,13 @@ def main() -> int:
     out_dir = root / "renamed files"
 
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clear any existing files in the output directory to avoid duplicates.
+    for item in out_dir.iterdir():
+        if item.is_file():
+            item.unlink()
+        elif item.is_dir():
+            shutil.rmtree(item)
 
     if not raw_dir.exists():
         print(f"ERROR: input directory does not exist: {raw_dir}")
