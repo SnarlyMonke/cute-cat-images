@@ -1,26 +1,20 @@
-"""Convert/copy images from "raw images" into "renamed files".
+"""Rename images in 'cats' folder to sequential 10-digit numbers.
 
-For each PNG/JPG/JPEG image found in "raw images", this script creates a copy named
-"cat_{n}.png" in the "renamed files" folder (where n is 1-based).
-
-It also writes a text file in "renamed files" with a single number indicating how many
-images were processed.
+Converts all PNG and JPG files in the 'cats' folder to PNG format and renames
+them to 10-digit zero-padded numbers (e.g., 0000000000.png, 0000000001.png, ...).
+Skips files that are already named with 10 digits.
 
 Usage:
     python convert.py
 
-If Pillow is installed (PIL), JPG/JPEG images will be converted to PNG. If it's not
-installed, the script will just copy files and keep their original format extension.
+If Pillow is installed (PIL), images will be converted to PNG. If it's not installed,
+the script will just rename files to .png extension (keeping original format).
 """
-
-#wow i know how this code works bcos i totally made it myself :)
 
 from __future__ import annotations
 
-import os
+import re
 from pathlib import Path
-import shutil
-import sys
 
 try:
     from PIL import Image
@@ -30,64 +24,73 @@ except ImportError:  # pragma: no cover
 
 def main() -> int:
     root = Path(__file__).resolve().parent
-    raw_dir = root / "raw images"
-    out_dir = root / "renamed files"
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # Clear any existing files in the output directory to avoid duplicates.
-    for item in out_dir.iterdir():
-        if item.is_file():
-            item.unlink()
-        elif item.is_dir():
-            shutil.rmtree(item)
+    raw_dir = root / "cats"
 
     if not raw_dir.exists():
         print(f"ERROR: input directory does not exist: {raw_dir}")
         return 1
 
     # Collect image files (case-insensitive extension match).
-    image_paths = sorted(
+    image_paths = [
         p for p in raw_dir.iterdir()
         if p.is_file() and p.suffix.lower() in {".png", ".jpg", ".jpeg"}
-    )
+    ]
 
     if not image_paths:
         print(f"No PNG/JPG images found in {raw_dir}.")
+        return 0
 
-    count = 0
-    for idx, src_path in enumerate(image_paths, start=1):
-        dest_name = f"cat_{idx}.png"
-        dest_path = out_dir / dest_name
+    # Find the highest existing 10-digit number.
+    existing_numbers = []
+    for p in raw_dir.iterdir():
+        if p.is_file() and p.suffix.lower() == ".png":
+            match = re.match(r'^(\d{10})\.png$', p.name)
+            if match:
+                existing_numbers.append(int(match.group(1)))
 
-        if Image is not None:
-            # Convert to PNG (if required) or just save.
-            try:
+    next_num = max(existing_numbers) + 1 if existing_numbers else 0
+
+    processed_count = 0
+    for src_path in image_paths:
+        # Check if already numbered.
+        if re.match(r'^\d{10}\.png$', src_path.name):
+            print(f"Skipped (already numbered): {src_path.name}")
+            continue
+
+        # Generate next number.
+        num_str = f"{next_num:010d}"
+        new_name = num_str + ".png"
+        dest_path = src_path.parent / new_name
+
+        try:
+            if Image is not None:
+                # Convert to PNG.
                 with Image.open(src_path) as im:
                     im = im.convert("RGBA")
                     im.save(dest_path, format="PNG")
-            except Exception as e:
-                print(f"WARNING: failed to convert {src_path} to PNG: {e}")
-                # Fallback: copy as-is with new name, preserving original extension.
-                fallback = out_dir / f"cat_{idx}{src_path.suffix.lower()}"
-                shutil.copy2(src_path, fallback)
-                dest_path = fallback
-        else:
-            # Pillow not installed: just copy with .png extension for consistency.
-            try:
-                shutil.copy2(src_path, dest_path)
-            except Exception as e:
-                print(f"WARNING: failed to copy {src_path} -> {dest_path}: {e}")
-                continue
+                # Remove original file.
+                src_path.unlink()
+            else:
+                # Pillow not installed: just rename to .png extension.
+                src_path.rename(dest_path)
+            print(f"Processed: {src_path.name} -> {new_name}")
+            processed_count += 1
+            next_num += 1
+        except Exception as e:
+            print(f"ERROR: failed to process {src_path.name}: {e}")
 
-        count += 1
+    # Count the total numbered PNG files.
+    numbered_count = sum(
+        1 for p in raw_dir.iterdir()
+        if p.is_file() and re.match(r'^\d{10}\.png$', p.name)
+    )
 
-    # Write count file.
-    count_file = out_dir / "image_count.txt"
-    count_file.write_text(str(count) + "\n", encoding="utf-8")
+    # Write count file in raw images.
+    count_file = raw_dir / "image_count.txt"
+    count_file.write_text(str(numbered_count) + "\n", encoding="utf-8")
 
-    print(f"Processed {count} images into '{out_dir}'")
-    print(f"Count written to: {count_file}")
+    print(f"Processed {processed_count} files.")
+    print(f"Total numbered PNGs: {numbered_count} (written to {count_file})")
     return 0
 
 
