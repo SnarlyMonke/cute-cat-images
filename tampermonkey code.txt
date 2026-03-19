@@ -1,0 +1,214 @@
+// ==UserScript==
+// @name         little fello generator
+// @namespace    http://tampermonkey.net/
+// @version      5.0.90000000000
+// @description  shmello generato
+// @match        https://lms.curtin.edu.au/*
+// @grant        none
+// @run-at       document-idle
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    const BASE = "https://raw.githubusercontent.com/SnarlyMonke/cute-cat-images/main/cats/";
+
+    let currentUrl = location.href;
+    let isInjecting = false;
+
+    function getHourSeed() {
+        return Math.floor(Date.now() / (1000 * 60 * 60));
+    }
+
+    function seededRandom(seed) {
+        const x = Math.sin(seed) * 10000;
+        return x - Math.floor(x);
+    }
+
+    async function getRandomImage() {
+        try {
+            const [imgRes, gifRes] = await Promise.all([
+                fetch(BASE + "image_count.txt"),
+                fetch(BASE + "gif_count.txt")
+            ]);
+
+            const imgCount = parseInt((await imgRes.text()).trim(), 10);
+            const gifCount = parseInt((await gifRes.text()).trim(), 10);
+
+            const total = imgCount + gifCount;
+
+            const seed = getHourSeed();
+            const rand = seededRandom(seed) * total;
+
+            let num, extension;
+
+            if (rand < imgCount) {
+                num = Math.floor(seededRandom(seed + 1) * imgCount);
+                extension = "png";
+            } else {
+                num = Math.floor(seededRandom(seed + 2) * gifCount);
+                extension = "gif";
+            }
+
+            const padded = String(num).padStart(10, '0');
+            return `${BASE}${padded}.${extension}`;
+
+        } catch (e) {
+            console.log("grimbo failure:", e);
+            return "https://placekitten.com/300/200";
+        }
+    }
+
+    function getRandomFelloWord() {
+        const words = ["fello", "shmello", "grimbo", "chumbo", "glumbo"];
+
+        const seed = getHourSeed();
+        const index = Math.floor(seededRandom(seed + 3) * words.length);
+
+        return words[index];
+    }
+
+    function isVisible(el) {
+        return el && el.offsetParent !== null;
+    }
+
+    function getSidebarContainer() {
+        const courseNav = document.querySelector('#courseMenuPalette_contents');
+        if (isVisible(courseNav)) return courseNav;
+
+        const mainNav = document.querySelector('nav[role="navigation"]');
+        if (isVisible(mainNav)) return mainNav;
+
+        return null;
+    }
+
+    async function injectGrimbo() {
+        const nav = getSidebarContainer();
+        if (!nav) return;
+
+        // ✅ prevent duplicates + race condition
+        if (document.getElementById('grimbo-box') || isInjecting) return;
+
+        isInjecting = true;
+
+        try {
+            const img = await getRandomImage();
+            const felloWord = getRandomFelloWord();
+
+            // ❗ check AGAIN after await (important)
+            if (document.getElementById('grimbo-box')) return;
+
+            const box = document.createElement('div');
+            box.id = 'grimbo-box';
+
+            box.innerHTML = `
+            <div style="
+                padding: 10px;
+                margin: 10px;
+                background: rgba(0,0,0,0.25);
+                text-align: center;
+                color: white;
+                font-size: 12px;
+            ">
+                <div style="margin-bottom: 6px; font-weight: bold;">
+                    little ${felloWord} of the hour
+                </div>
+                <img src="${img}" style="width: 100%;">
+            </div>
+        `;
+
+            // 🧼 reset styles first (prevents carry-over bugs)
+            box.style.position = "";
+            box.style.bottom = "";
+            box.style.zIndex = "";
+
+            // 📚 COURSE PAGE (Blackboard original UI)
+            if (nav.id === "courseMenuPalette_contents") {
+
+                const li = document.createElement('li');
+                li.style.listStyle = "none";
+                li.style.margin = "0";
+                li.style.padding = "0";
+
+                box.style.position = "static";
+                box.style.zIndex = "auto";
+                box.style.background = "transparent";
+                box.style.padding = "5px";
+                box.style.position = "relative";
+
+                li.appendChild(box);
+
+                // 🔍 find "Assessments"
+                const items = Array.from(nav.querySelectorAll('li'));
+
+                const assessmentsItem = items.find(el =>
+                                                   el.textContent && el.textContent.includes('Assessments')
+                                                  );
+
+                if (assessmentsItem && assessmentsItem.parentElement) {
+                    // insert AFTER assessments
+                    assessmentsItem.parentElement.insertBefore(li, assessmentsItem.nextSibling);
+                } else {
+                    // fallback (bottom)
+                    nav.appendChild(li);
+                }
+            } else {
+
+                box.style.position = "sticky";
+                box.style.bottom = "0";
+                box.style.zIndex = "999";
+
+                const signOut = Array.from(nav.querySelectorAll('*')).find(el =>
+                                                                           el.textContent && el.textContent.includes('Sign Out')
+                                                                          );
+
+                if (signOut && signOut.parentElement) {
+                    signOut.parentElement.insertBefore(box, signOut);
+                } else {
+                    nav.appendChild(box);
+                }
+            }
+
+        } finally {
+            isInjecting = false;
+        }
+    }
+
+    function waitForNavAndInject() {
+        const nav = getSidebarContainer();
+        if (nav) {
+            injectGrimbo();
+        } else {
+            setTimeout(waitForNavAndInject, 400);
+        }
+    }
+
+    // 🚀 Initial run
+    waitForNavAndInject();
+
+    // 🔁 Detect SPA navigation (URL changes)
+    setInterval(() => {
+        if (location.href !== currentUrl) {
+            currentUrl = location.href;
+
+            // Remove old fello (if any)
+            const old = document.getElementById('grimbo-box');
+            if (old) old.remove();
+
+            waitForNavAndInject();
+        }
+    }, 800);
+
+    // 👀 Watch for sidebar being re-rendered (React moment)
+    const observer = new MutationObserver(() => {
+        if (!document.getElementById('grimbo-box')) {
+            injectGrimbo();
+        }
+    });
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+
+})();
