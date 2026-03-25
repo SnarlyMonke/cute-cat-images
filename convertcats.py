@@ -13,7 +13,7 @@ Creates two count files:
   - gif_count.txt: number of GIFs
 
 Usage:
-    python convert.py
+    python convertcats.py
 
 If Pillow is installed (PIL), images will be converted. If it's not installed,
 the script will just rename files (keeping original binary format).
@@ -175,6 +175,9 @@ def main() -> int:
     print(f"\nProcessed {png_processed} PNG files. Total numbered PNGs: {png_count}")
     print(f"Processed {gif_processed} GIF files. Total numbered GIFs: {gif_count}")
     print(f"Count files written: {png_count_file}, {gif_count_file}")
+
+    input()
+
     return 0
 
 
