@@ -146,7 +146,12 @@ def main() -> int:
         return 1
 
     # Process PNGs.
-    png_processed = process_format(raw_dir, {".png", ".jpg", ".jpeg"}, ".png", "PNG")
+    png_processed = process_format(
+        raw_dir,
+        {".png", ".jpg", ".jpeg", ".jfif"},
+        ".png",
+        "PNG"
+    )
     fill_gaps(raw_dir, ".png", "PNG")
 
     # Process GIFs.
