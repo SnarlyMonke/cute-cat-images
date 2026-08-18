@@ -32,18 +32,19 @@ except ImportError:  # pragma: no cover
     Image = None  # type: ignore
 
 
-def process_format(raw_dir: Path, extensions: set[str], output_ext: str, format_name: str) -> int:
-    """Process images of a given format, convert, rename, and fill gaps.
-    
-    Args:
-        raw_dir: Directory containing images.
-        extensions: Set of file extensions to process (e.g., {".png", ".jpg"}).
-        output_ext: Output extension (e.g., ".png", ".gif").
-        format_name: Human-readable format name for logging.
-    
-    Returns:
-        Number of files processed.
+def process_format(
+    raw_dir: Path,
+    extensions: set[str],
+    output_ext: str,
+    format_name: str
+) -> int:
+    """Process images of a given format, convert/rename them, and fill gaps.
+
+    GIF files are only renamed so their animation data remains completely
+    untouched. PNG/JPG/JPEG/JFIF files are converted to PNG when Pillow
+    is available.
     """
+
     # Collect image files (case-insensitive extension match).
     image_paths = [
         p for p in raw_dir.iterdir()
@@ -65,6 +66,7 @@ def process_format(raw_dir: Path, extensions: set[str], output_ext: str, format_
     next_num = max(existing_numbers) + 1 if existing_numbers else 0
 
     processed_count = 0
+
     for src_path in image_paths:
         # Check if already numbered.
         if re.match(rf'^\d{{10}}\{output_ext}$', src_path.name):
@@ -77,26 +79,37 @@ def process_format(raw_dir: Path, extensions: set[str], output_ext: str, format_
         dest_path = src_path.parent / new_name
 
         try:
-            if Image is not None:
-                # Open and convert/save in target format.
-                with Image.open(src_path) as im:
-                    # Handle transparency for PNG.
-                    if output_ext.lower() == ".png":
-                        im = im.convert("RGBA")
-                        im.save(dest_path, format="PNG")
-                    else:
-                        # For GIF, save as-is or convert palette if needed.
-                        im.save(dest_path, format="GIF")
-                # Remove original file.
-                src_path.unlink()
-            else:
-                # Pillow not installed: just rename to output extension.
+            if output_ext.lower() == ".gif":
+                # GIFs are already in the correct format.
+                # Only rename them so their contents remain untouched.
                 src_path.rename(dest_path)
-            print(f"Processed ({format_name}): {src_path.name} -> {new_name}")
+
+            elif Image is not None:
+                # PNG/JPG/JPEG/JFIF -> PNG.
+                with Image.open(src_path) as im:
+                    im = im.convert("RGBA")
+                    im.save(dest_path, format="PNG")
+
+                # Remove original after successful conversion.
+                src_path.unlink()
+
+            else:
+                # Pillow not installed: just rename the file.
+                src_path.rename(dest_path)
+
+            print(
+                f"Processed ({format_name}): "
+                f"{src_path.name} -> {new_name}"
+            )
+
             processed_count += 1
             next_num += 1
+
         except Exception as e:
-            print(f"ERROR: failed to process {src_path.name}: {e}")
+            print(
+                f"ERROR: failed to process "
+                f"{src_path.name}: {e}"
+            )
 
     return processed_count
 
